@@ -6,6 +6,8 @@
 
 #include <Arduino.h>
 
+#include <TaskScheduler.h>
+
 #ifdef ESP8266
   #include <ESP8266WiFi.h>
   extern "C" {
@@ -15,6 +17,23 @@
   #include <WiFi.h>
 #endif
 
+/*+--------------------------------------------------------------------------------------+
+ *| Callback methods prototypes                                                          |
+ *+--------------------------------------------------------------------------------------+ */
+ 
+void VerifyWifi();
+
+/*+--------------------------------------------------------------------------------------+
+ *| Tasks lists                                                                          |
+ *+--------------------------------------------------------------------------------------+ */
+
+Task t2(3000, TASK_FOREVER, &VerifyWifi);
+
+/*+--------------------------------------------------------------------------------------+
+ *| Scheduler                                                                            |
+ *+--------------------------------------------------------------------------------------+ */
+
+Scheduler runner;
 
 /*+--------------------------------------------------------------------------------------+
  *| Constants declaration                                                                |
@@ -78,6 +97,15 @@ void setup() {
   Serial.begin(115200);                                                                     // Start serial communication at 115200 baud
   delay(1000);
 
+  runner.init();
+    Serial.println("Initialized scheduler");
+
+  runner.addTask(t2);
+    Serial.println("Added task VerifyWifi");
+
+  t2.enable();
+    Serial.println("Enabled task VerifyWifi");
+
   setup_wifi(); 
 
 }
@@ -90,7 +118,7 @@ void setup() {
  
 void loop() {
 
-  delay(1000);
-  VerifyWifi();   
+  runner.execute();
+  
 
 }
