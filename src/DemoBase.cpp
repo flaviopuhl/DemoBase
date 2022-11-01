@@ -22,12 +22,16 @@
 
 #include <ESP32Time.h>                   // ESP32 internal RTC library
 
+#include <esp_task_wdt.h>                // Watchdog library
+
 /*+--------------------------------------------------------------------------------------+
  *| Constants declaration                                                                |
  *+--------------------------------------------------------------------------------------+ */
  
 const char *ssid                              = "CasaDoTheodoro1";                        // name of your WiFi network
 const char *password                          = "09012011";                               // password of the WiFi network
+
+#define WATCHDOGTIMEOUT                       10
 
 unsigned int previousMillis = 0;
 
@@ -151,8 +155,12 @@ void setup() {
   Serial.begin(115200);                                                                     // Start serial communication at 115200 baud
   delay(1000);
 
+  esp_task_wdt_init(WATCHDOGTIMEOUT, true);               // Enable watchdog                                               
+  esp_task_wdt_add(NULL);                                 // No tasks attached to watchdog
+    Serial.println("Watchdog      : [ initialized ]");
+
   runner.init();
-    Serial.println("Initialized scheduler");
+    Serial.println("Scheduler     : [ initialized ]");
 
   runner.addTask(t1);
     Serial.println("Added task    : [ VerifyWifi ]");
@@ -179,6 +187,7 @@ void setup() {
  
 
   Serial.print("\n\nSetup Finished\n\n");
+  esp_task_wdt_reset();
 
 }
 
@@ -209,6 +218,6 @@ void loop() {
   }
 
   
-  
+  esp_task_wdt_reset();  
 
 }
