@@ -8,14 +8,7 @@
 
 #include <TaskScheduler.h>                // Scheduler Library
 
-#ifdef ESP8266
-  #include <ESP8266WiFi.h>
-  extern "C" {
-  #include "user_interface.h"
-  } 
-#else
-  #include <WiFi.h>
-#endif
+#include <WiFi.h>
 
 #include <WiFiUDP.h>                     // Network Time Protocol NPT library
 #include <NTPClient.h>                   // Network Time Protocol NPT library
@@ -24,7 +17,14 @@
 
 #include <esp_task_wdt.h>                // Watchdog library
 
-#include <rom/rtc.h>
+#include <rom/rtc.h>                     // Wakeup reason
+
+#include <WiFiMulti.h>                   // http update
+#include <HTTPClient.h>                  // http update
+#include <HTTPUpdate.h>                  // http update
+#include <WiFiClientSecure.h>            // http update
+
+
 
 /*+--------------------------------------------------------------------------------------+
  *| Constants declaration                                                                |
@@ -35,8 +35,15 @@ const char *password                          = "09012011";                     
 
 #define WATCHDOGTIMEOUT                       10
 
-unsigned int previousMillis = 0;
-int i=0;
+#define OTAFIRMWAREREPO                       "https://firebasestorage.googleapis.com/v0/b/firmwareota-a580e.appspot.com/o/ESP32OTAexample%2Ffirmware.bin?alt=media"
+RTC_DATA_ATTR int updateSoftareOnNextReboot;  // If =1, Controller will download and update on next reboot.  If =0 does nothing
+
+String FirmWareVersion                        = "DemoBase_001";
+
+unsigned int previousMillis = 0;   //debug
+int i=0; // debug
+
+
 /*+--------------------------------------------------------------------------------------+
  *| Callback methods prototypes                                                          |
  *+--------------------------------------------------------------------------------------+ */
@@ -174,6 +181,49 @@ void print_reset_reason(RESET_REASON reason)
   }
 }
 
+/*+--------------------------------------------------------------------------------------+
+ *| Remote HTTP OTA                                                                      |
+ *+--------------------------------------------------------------------------------------+ */
+
+void RemoteHTTPOTA(){
+
+  if ((WiFi.status() == WL_CONNECTED && updateSoftareOnNextReboot == 1)) {
+
+    Serial.println("SW Update     :  [ Started ]");
+
+    updateSoftareOnNextReboot = 0;
+
+    WiFiClientSecure client; 
+    client.setInsecure();
+
+    // The line below is optional. It can be used to blink the LED on the board during flashing
+    // The LED will be on during download of one buffer of data from the network. The LED will
+    // be off during writing that buffer to flash
+    // On a good connection the LED should flash regularly. On a bad connection the LED will be
+    // on much longer than it will be off. Other pins than LED_BUILTIN may be used. The second
+    // value is used to put the LED on. If the LED is on with HIGH, that value should be passed
+    httpUpdate.setLedPin(LED_BUILTIN, LOW);
+
+    t_httpUpdate_return ret = httpUpdate.update(client, OTAFIRMWAREREPO);
+    
+
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("HTTP_UPDATE_FAILED Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+        break;
+
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("HTTP_UPDATE_NO_UPDATES");
+        break;
+
+      case HTTP_UPDATE_OK:
+        Serial.println("SW Download   :  [ Done, will update on next reboot ]");
+        break;
+    }
+  } else{
+    Serial.println("SW Download   : [ Not requested ]");
+  }
+}
 
 /*+--------------------------------------------------------------------------------------+
  *| Setup                                                                                |
@@ -184,28 +234,28 @@ void setup() {
   Serial.begin(115200);                                                                     // Start serial communication at 115200 baud
   delay(1000);
 
-  esp_task_wdt_init(WATCHDOGTIMEOUT, true);               // Enable watchdog                                               
-  esp_task_wdt_add(NULL);                                 // No tasks attached to watchdog
-    Serial.println("Watchdog      : [ initialized ]");
+  Serial.println();
+  Serial.println(FirmWareVersion);
+  Serial.println();
 
   runner.init();
-    Serial.println("Scheduler     : [ initialized ]");
+    runner.addTask(t1);
+    t1.enable();  
+      Serial.println("Added task    : [ VerifyWifi ]");
 
-  runner.addTask(t1);
-    Serial.println("Added task    : [ VerifyWifi ]");
+    runner.addTask(t2);
+    t2.enable();
+      Serial.println("Added task    : [ DateAndTimeNPT ]");
 
-  t1.enable();
-    Serial.println("Enabled task  : [ VerifyWifi ]");
+  setup_wifi();     // Start wifi
 
-  runner.addTask(t2);
-    Serial.println("Added task    : [ DateAndTimeNPT ]");
+  RemoteHTTPOTA();      // Check for firmware updates
 
-  t2.enable();
-    Serial.println("Enabled task  : [ DateAndTimeNPT ]");
+  esp_task_wdt_init(WATCHDOGTIMEOUT, true);               // Enable watchdog                                               
+  esp_task_wdt_add(NULL);                                 // No tasks attached to watchdog
+     Serial.println("Watchdog      : [ initialized ]");
 
-  setup_wifi(); 
-
-  DateAndTimeNPT();
+  DateAndTimeNPT();     // Get time from NPT and update ESP RTC
 
   Serial.print("RTC Unix       : ");          // debug only
   Serial.println(DateAndTimeEpochRTC());      // debug only
@@ -218,10 +268,13 @@ void setup() {
 
   Serial.print("CPU1 rst reason: ");
   print_reset_reason(rtc_get_reset_reason(1));
- 
 
-  Serial.print("\n\nSetup Finished\n\n");
-  esp_task_wdt_reset();
+  
+  
+   
+
+  Serial.print("\n\nSetup Finished - 1001 \n\n");
+  esp_task_wdt_reset();   // feed watchdog
 
 }
 
@@ -235,7 +288,6 @@ void loop() {
 
   runner.execute();
 
-  
   
   
   
@@ -259,6 +311,6 @@ void loop() {
   }
 
   
-  esp_task_wdt_reset();  
+  esp_task_wdt_reset();     // feed watchdog
 
 }
