@@ -53,6 +53,8 @@ const char* BROKER_MQTT = "broker.hivemq.com";               // MQTT Cloud Broke
 String DeviceName                             = "DemoBase";
 String FirmWareVersion                        = "DemoBase_001";
 
+int UptimeHours                               = 0;
+
 unsigned int previousMillis = 0;   //debug
 int i=0; // debug
 
@@ -64,6 +66,7 @@ int i=0; // debug
 void VerifyWifi();
 void DateAndTimeNPT();
 void SerializeAndPublish();
+void Uptime();
 
 /*+--------------------------------------------------------------------------------------+
  *| Tasks lists                                                                          |
@@ -72,6 +75,7 @@ void SerializeAndPublish();
 Task t1(01*30*1000, TASK_FOREVER, &VerifyWifi);
 Task t2(60*60*1000, TASK_FOREVER, &DateAndTimeNPT);
 Task t3(01*60*1000, TASK_FOREVER, &SerializeAndPublish);
+Task t4(60*60*1000, TASK_FOREVER, &Uptime);
 
 /*+--------------------------------------------------------------------------------------+
  *| Objects                                                                          |
@@ -298,7 +302,7 @@ void SerializeAndPublish() {
       doc["RSSI (db)"] = WiFi.RSSI();
       doc["IP"] = WiFi.localIP();
       doc["LastRoll"] = DateAndTimeFormattedRTC();
-      //doc["UpTime (h)"] = uptime;
+      doc["UpTime (h)"] = UptimeHours;
       //doc["Last Picture"] = fileName;
       //doc["Temp (°C)"] = dtostrf(getTemp(), 2, 1, buff);
     
@@ -339,6 +343,10 @@ void setup() {
     t3.enable();
       Serial.println("Added task    : [ SerializeAndPublish ]");
 
+    runner.addTask(t4);
+    t4.enable();
+      Serial.println("Added task    : [ Uptime ]");
+
   setup_wifi();     // Start wifi
 
   RemoteHTTPOTA();      // Check for firmware updates
@@ -375,6 +383,15 @@ void setup() {
 }
 
 
+/*+--------------------------------------------------------------------------------------+
+ *| Uptime counter in hours                                                              |
+ *+--------------------------------------------------------------------------------------+ */
+ 
+void Uptime() {
+
+  UptimeHours++;
+
+}
 
 /*+--------------------------------------------------------------------------------------+
  *| main loop                                                                            |
