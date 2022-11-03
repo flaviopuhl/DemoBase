@@ -24,6 +24,8 @@
 #include <HTTPUpdate.h>                  // http update
 #include <WiFiClientSecure.h>            // http update
 
+#include <PubSubClient.h>                // MQTT
+#include <ArduinoJson.h>                 // MQTT
 
 
 /*+--------------------------------------------------------------------------------------+
@@ -38,6 +40,17 @@ const char *password                          = "09012011";                     
 #define OTAFIRMWAREREPO                       "https://firebasestorage.googleapis.com/v0/b/firmwareota-a580e.appspot.com/o/ESP32OTAexample%2Ffirmware.bin?alt=media"
 RTC_DATA_ATTR int updateSoftareOnNextReboot;  // If =1, Controller will download and update on next reboot.  If =0 does nothing
 
+const char *ID = "DemoBase";                                 // Name of our device, must be unique
+const char *TOPIC = "DemoBase/data";                         // Topic to subcribe to
+const char* BROKER_MQTT = "broker.hivemq.com";               // MQTT Cloud Broker URL
+//const char* BROKER_MQTT = "mqtt.tago.io";               // MQTT Cloud Broker URL
+
+//TCP/IP port: 1883
+//TCP/IP port over SSL: 8883
+//username: Token
+//password: Your Device-Token
+
+String DeviceName                             = "DemoBase";
 String FirmWareVersion                        = "DemoBase_001";
 
 unsigned int previousMillis = 0;   //debug
@@ -50,6 +63,7 @@ int i=0; // debug
  
 void VerifyWifi();
 void DateAndTimeNPT();
+void SerializeAndPublish();
 
 /*+--------------------------------------------------------------------------------------+
  *| Tasks lists                                                                          |
@@ -57,6 +71,7 @@ void DateAndTimeNPT();
 
 Task t1(01*30*1000, TASK_FOREVER, &VerifyWifi);
 Task t2(60*60*1000, TASK_FOREVER, &DateAndTimeNPT);
+Task t3(01*60*1000, TASK_FOREVER, &SerializeAndPublish);
 
 /*+--------------------------------------------------------------------------------------+
  *| Objects                                                                          |
@@ -64,6 +79,10 @@ Task t2(60*60*1000, TASK_FOREVER, &DateAndTimeNPT);
 
 Scheduler runner;                                           // Scheduler
 ESP32Time rtc;
+
+WiFiClient wclient;
+PubSubClient MQTTclient(wclient);                           // Setup MQTT client
+
 
 /*+--------------------------------------------------------------------------------------+
  *| Connect to WiFi network                                                              |
@@ -225,6 +244,75 @@ void RemoteHTTPOTA(){
   }
 }
 
+
+/*+--------------------------------------------------------------------------------------+
+ *| Reconnect to MQTT client                                                             |
+ *+--------------------------------------------------------------------------------------+ */
+ 
+void MQTTconnect() {
+  
+  //WiFiClient wclient;
+  //PubSubClient MQTTclient(wclient);                           // Setup MQTT client
+
+  if(!MQTTclient.connected()) {                               // Check if MQTT client is connected
+  
+  Serial.println();
+  Serial.println("MQTT Client   : [ not connected ]");
+
+  MQTTclient.setServer(BROKER_MQTT, 1883);                    // MQTT port, unsecure                        
+    
+    Serial.println("MQTT Client   : [ trying connection ]");
+    
+    if (MQTTclient.connect(ID)) {
+      Serial.println("MQTT Client   : [ broker connected ]");
+      Serial.print("MQTT Client   : [ publishing to ");
+      Serial.print(TOPIC);
+      Serial.println(" ]");
+    } else {
+      Serial.print("MQTT Client   : [ failed, rc= ");
+      Serial.print(MQTTclient.state());
+      Serial.println(" ]");
+
+      delay(5000);
+      setup_wifi();
+    }
+  }
+}
+
+/*+--------------------------------------------------------------------------------------+
+ *| Serialize JSON and publish MQTT                                                      |
+ *+--------------------------------------------------------------------------------------+ */
+
+void SerializeAndPublish() {
+
+  if (!MQTTclient.connected())                            // Reconnect if connection to MQTT is lost 
+  {    MQTTconnect();      }
+
+  char buff[10];                                      // Buffer to allocate decimal to string conversion 
+  char buffer[256];                                   // JSON serialization 
+  
+    StaticJsonDocument<256> doc;                      // See ArduinoJson Assistant V6 
+    
+      doc["Device"] = DeviceName;
+      doc["Version"] = FirmWareVersion;
+      doc["RSSI (db)"] = WiFi.RSSI();
+      doc["IP"] = WiFi.localIP();
+      doc["LastRoll"] = DateAndTimeFormattedRTC();
+      //doc["UpTime (h)"] = uptime;
+      //doc["Last Picture"] = fileName;
+      //doc["Temp (°C)"] = dtostrf(getTemp(), 2, 1, buff);
+    
+    serializeJson(doc, buffer);
+      Serial.printf("\nJSON Payload:");
+      Serial.printf("\n");
+    serializeJsonPretty(doc, Serial);                 // Print JSON payload on Serial port        
+      Serial.printf("\n");
+      Serial.println("MQTT Client   : [ Sending message to MQTT topic ]");                  
+      MQTTclient.publish(TOPIC, buffer);                    // Publish data to MQTT Broker 
+
+}
+
+
 /*+--------------------------------------------------------------------------------------+
  *| Setup                                                                                |
  *+--------------------------------------------------------------------------------------+ */
@@ -247,6 +335,10 @@ void setup() {
     t2.enable();
       Serial.println("Added task    : [ DateAndTimeNPT ]");
 
+    runner.addTask(t3);
+    t3.enable();
+      Serial.println("Added task    : [ SerializeAndPublish ]");
+
   setup_wifi();     // Start wifi
 
   RemoteHTTPOTA();      // Check for firmware updates
@@ -256,6 +348,10 @@ void setup() {
      Serial.println("Watchdog      : [ initialized ]");
 
   DateAndTimeNPT();     // Get time from NPT and update ESP RTC
+
+  MQTTconnect();        // Connect to MQTT Broker
+
+  SerializeAndPublish();
 
   Serial.print("RTC Unix       : ");          // debug only
   Serial.println(DateAndTimeEpochRTC());      // debug only
@@ -287,6 +383,9 @@ void setup() {
 void loop() {
 
   runner.execute();
+
+  MQTTclient.loop();                                      // Needs to be in the loop to keep client connection alive
+
 
   
   
