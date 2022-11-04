@@ -53,7 +53,11 @@ const char* BROKER_MQTT = "broker.hivemq.com";               // MQTT Cloud Broke
 String DeviceName                             = "DemoBase";
 String FirmWareVersion                        = "DemoBase_001";
 
+String WakeUpReasonCPU0                       = "";
+String WakeUpReasonCPU1                       = "";
+
 int UptimeHours                               = 0;
+RTC_DATA_ATTR int UptimeHoursLifeTime;
 
 unsigned int previousMillis = 0;   //debug
 int i=0; // debug
@@ -181,28 +185,81 @@ String DateAndTimeFormattedRTC(){
  *| Method to print the reason by which ESP32 has been awaken from sleep                 |
  *+--------------------------------------------------------------------------------------+ */
 
-void print_reset_reason(RESET_REASON reason)
+
+//void print_reset_reason(RESET_REASON reason)
+//{
+//  switch ( reason)
+//  {
+//    case 1 : Serial.println ("POWERON_RESET");break;          /**<1, Vbat power on reset*/
+//    case 3 : Serial.println ("SW_RESET");break;               /**<3, Software reset digital core*/
+//    case 4 : Serial.println ("OWDT_RESET");break;             /**<4, Legacy watch dog reset digital core*/
+//    case 5 : Serial.println ("DEEPSLEEP_RESET");break;        /**<5, Deep Sleep reset digital core*/
+//    case 6 : Serial.println ("SDIO_RESET");break;             /**<6, Reset by SLC module, reset digital core*/
+//    case 7 : Serial.println ("TG0WDT_SYS_RESET");break;       /**<7, Timer Group0 Watch dog reset digital core*/
+//    case 8 : Serial.println ("TG1WDT_SYS_RESET");break;       /**<8, Timer Group1 Watch dog reset digital core*/
+//    case 9 : Serial.println ("RTCWDT_SYS_RESET");break;       /**<9, RTC Watch dog Reset digital core*/
+//    case 10 : Serial.println ("INTRUSION_RESET");break;       /**<10, Instrusion tested to reset CPU*/
+//    case 11 : Serial.println ("TGWDT_CPU_RESET");break;       /**<11, Time Group reset CPU*/
+//    case 12 : Serial.println ("SW_CPU_RESET");break;          /**<12, Software reset CPU*/
+//    case 13 : Serial.println ("RTCWDT_CPU_RESET");break;      /**<13, RTC Watch dog Reset CPU*/
+//    case 14 : Serial.println ("EXT_CPU_RESET");break;         /**<14, for APP CPU, reseted by PRO CPU*/
+//    case 15 : Serial.println ("RTCWDT_BROWN_OUT_RESET");break;/**<15, Reset when the vdd voltage is not stable*/
+//    case 16 : Serial.println ("RTCWDT_RTC_RESET");break;      /**<16, RTC Watch dog reset digital core and rtc module*/
+//    default : Serial.println ("NO_MEAN");
+//  }
+//}
+
+String print_reset_reason(RESET_REASON reason)
+{
+  String rst_reason;
+
+  switch ( reason)
+  {
+    case 1 : rst_reason = String(reason) + " POWERON_RESET";break;          /**<1, Vbat power on reset*/
+    case 3 : rst_reason = String(reason) + " SW_RESET";break;               /**<3, Software reset digital core*/
+    case 4 : rst_reason = String(reason) + " OWDT_RESET";break;             /**<4, Legacy watch dog reset digital core*/
+    case 5 : rst_reason = String(reason) + " DEEPSLEEP_RESET";break;        /**<5, Deep Sleep reset digital core*/
+    case 6 : rst_reason = String(reason) + " SDIO_RESET";break;             /**<6, Reset by SLC module, reset digital core*/
+    case 7 : rst_reason = String(reason) + " TG0WDT_SYS_RESET";break;       /**<7, Timer Group0 Watch dog reset digital core*/
+    case 8 : rst_reason = String(reason) + " TG1WDT_SYS_RESET";break;       /**<8, Timer Group1 Watch dog reset digital core*/
+    case 9 : rst_reason = String(reason) + " RTCWDT_SYS_RESET";break;       /**<9, RTC Watch dog Reset digital core*/
+    case 10 : rst_reason = String(reason) + " INTRUSION_RESET";break;       /**<10, Instrusion tested to reset CPU*/
+    case 11 : rst_reason = String(reason) + " TGWDT_CPU_RESET";break;       /**<11, Time Group reset CPU*/
+    case 12 : rst_reason = String(reason) + " SW_CPU_RESET";break;          /**<12, Software reset CPU*/
+    case 13 : rst_reason = String(reason) + " RTCWDT_CPU_RESET";break;      /**<13, RTC Watch dog Reset CPU*/
+    case 14 : rst_reason = String(reason) + " EXT_CPU_RESET";break;         /**<14, for APP CPU, reseted by PRO CPU*/
+    case 15 : rst_reason = String(reason) + " RTCWDT_BROWN_OUT_RESET";break;/**<15, Reset when the vdd voltage is not stable*/
+    case 16 : rst_reason = String(reason) + " RTCWDT_RTC_RESET";break;      /**<16, RTC Watch dog reset digital core and rtc module*/
+    default : rst_reason = String(reason) + " UNKNOW";
+  }
+
+  return rst_reason;
+}
+
+
+void verbose_print_reset_reason(int reason)
 {
   switch ( reason)
   {
-    case 1 : Serial.println ("POWERON_RESET");break;          /**<1, Vbat power on reset*/
-    case 3 : Serial.println ("SW_RESET");break;               /**<3, Software reset digital core*/
-    case 4 : Serial.println ("OWDT_RESET");break;             /**<4, Legacy watch dog reset digital core*/
-    case 5 : Serial.println ("DEEPSLEEP_RESET");break;        /**<5, Deep Sleep reset digital core*/
-    case 6 : Serial.println ("SDIO_RESET");break;             /**<6, Reset by SLC module, reset digital core*/
-    case 7 : Serial.println ("TG0WDT_SYS_RESET");break;       /**<7, Timer Group0 Watch dog reset digital core*/
-    case 8 : Serial.println ("TG1WDT_SYS_RESET");break;       /**<8, Timer Group1 Watch dog reset digital core*/
-    case 9 : Serial.println ("RTCWDT_SYS_RESET");break;       /**<9, RTC Watch dog Reset digital core*/
-    case 10 : Serial.println ("INTRUSION_RESET");break;       /**<10, Instrusion tested to reset CPU*/
-    case 11 : Serial.println ("TGWDT_CPU_RESET");break;       /**<11, Time Group reset CPU*/
-    case 12 : Serial.println ("SW_CPU_RESET");break;          /**<12, Software reset CPU*/
-    case 13 : Serial.println ("RTCWDT_CPU_RESET");break;      /**<13, RTC Watch dog Reset CPU*/
-    case 14 : Serial.println ("EXT_CPU_RESET");break;         /**<14, for APP CPU, reseted by PRO CPU*/
-    case 15 : Serial.println ("RTCWDT_BROWN_OUT_RESET");break;/**<15, Reset when the vdd voltage is not stable*/
-    case 16 : Serial.println ("RTCWDT_RTC_RESET");break;      /**<16, RTC Watch dog reset digital core and rtc module*/
-    default : Serial.println ("NO_MEAN");
+    case 1  : Serial.println (" Vbat power on reset");break;
+    case 3  : Serial.println (" Software reset digital core");break;
+    case 4  : Serial.println (" Legacy watch dog reset digital core");break;
+    case 5  : Serial.println (" Deep Sleep reset digital core");break;
+    case 6  : Serial.println (" Reset by SLC module, reset digital core");break;
+    case 7  : Serial.println (" Timer Group0 Watch dog reset digital core");break;
+    case 8  : Serial.println (" Timer Group1 Watch dog reset digital core");break;
+    case 9  : Serial.println (" RTC Watch dog Reset digital core");break;
+    case 10 : Serial.println (" Instrusion tested to reset CPU");break;
+    case 11 : Serial.println (" Time Group reset CPU");break;
+    case 12 : Serial.println (" Software reset CPU");break;
+    case 13 : Serial.println (" RTC Watch dog Reset CPU");break;
+    case 14 : Serial.println (" for APP CPU, reseted by PRO CPU");break;
+    case 15 : Serial.println (" Reset when the vdd voltage is not stable");break;
+    case 16 : Serial.println (" RTC Watch dog reset digital core and rtc module");break;
+    default : Serial.println (" NO_MEAN");
   }
 }
+
 
 /*+--------------------------------------------------------------------------------------+
  *| Remote HTTP OTA                                                                      |
@@ -214,10 +271,10 @@ void RemoteHTTPOTA(){
 
     Serial.println("SW Update     :  [ Started ]");
 
-    updateSoftareOnNextReboot = 0;
+    updateSoftareOnNextReboot = 0;    // Clear the update flag
 
     WiFiClientSecure client; 
-    client.setInsecure();
+    client.setInsecure();       
 
     // The line below is optional. It can be used to blink the LED on the board during flashing
     // The LED will be on during download of one buffer of data from the network. The LED will
@@ -254,9 +311,6 @@ void RemoteHTTPOTA(){
  *+--------------------------------------------------------------------------------------+ */
  
 void MQTTconnect() {
-  
-  //WiFiClient wclient;
-  //PubSubClient MQTTclient(wclient);                           // Setup MQTT client
 
   if(!MQTTclient.connected()) {                               // Check if MQTT client is connected
   
@@ -297,12 +351,16 @@ void SerializeAndPublish() {
   
     StaticJsonDocument<256> doc;                      // See ArduinoJson Assistant V6 
     
-      doc["Device"] = DeviceName;
-      doc["Version"] = FirmWareVersion;
-      doc["RSSI (db)"] = WiFi.RSSI();
-      doc["IP"] = WiFi.localIP();
-      doc["LastRoll"] = DateAndTimeFormattedRTC();
-      doc["UpTime (h)"] = UptimeHours;
+      doc["Device"]             = DeviceName;
+      doc["Version"]            = FirmWareVersion;
+      doc["RSSI (db)"]          = WiFi.RSSI();
+      doc["IP"]                 = WiFi.localIP();
+      doc["LastRoll"]           = DateAndTimeFormattedRTC();
+      doc["UpTime (h)"]         = UptimeHours;
+      doc["UptimeLife (h)"]     = UptimeHoursLifeTime;
+      doc["WakeUpReasonCPU0"]   = WakeUpReasonCPU0;
+      doc["WakeUpReasonCPU1"]   = WakeUpReasonCPU1;
+      doc["freeHeapMem"]        = ESP.getFreeHeap();
       //doc["Last Picture"] = fileName;
       //doc["Temp (°C)"] = dtostrf(getTemp(), 2, 1, buff);
     
@@ -311,11 +369,22 @@ void SerializeAndPublish() {
       Serial.printf("\n");
     serializeJsonPretty(doc, Serial);                 // Print JSON payload on Serial port        
       Serial.printf("\n");
-      Serial.println("MQTT Client   : [ Sending message to MQTT topic ]");                  
+      Serial.println("MQTT Client   : [ Sending message to MQTT topic ]"); 
+      Serial.println("");                 
       MQTTclient.publish(TOPIC, buffer);                    // Publish data to MQTT Broker 
 
 }
 
+/*+--------------------------------------------------------------------------------------+
+ *| Uptime counter in hours                                                              |
+ *+--------------------------------------------------------------------------------------+ */
+ 
+void Uptime() {
+
+  UptimeHours++;          // Uptime counts the time the device is working since last power on
+  UptimeHoursLifeTime++;    // Life time counts the total time the device is been working
+
+}
 
 /*+--------------------------------------------------------------------------------------+
  *| Setup                                                                                |
@@ -367,15 +436,19 @@ void setup() {
   Serial.print("RTC formatted  : ");          // debug only
   Serial.println(DateAndTimeFormattedRTC());  // debug only
  
-  Serial.print("CPU0 rst reason: ");
-  print_reset_reason(rtc_get_reset_reason(0));
+  WakeUpReasonCPU0 = print_reset_reason(rtc_get_reset_reason(0));
+    Serial.print("CPU0 rst reason: ");
+    Serial.print(WakeUpReasonCPU0);
+      verbose_print_reset_reason(rtc_get_reset_reason(0));
 
-  Serial.print("CPU1 rst reason: ");
-  print_reset_reason(rtc_get_reset_reason(1));
+  WakeUpReasonCPU1 = print_reset_reason(rtc_get_reset_reason(1));
+    Serial.print("CPU1 rst reason: ");
+    Serial.print(WakeUpReasonCPU1);
+      verbose_print_reset_reason(rtc_get_reset_reason(1));
 
-  
-  
+    
    
+  UptimeHours--;
 
   Serial.print("\n\nSetup Finished - 1001 \n\n");
   esp_task_wdt_reset();   // feed watchdog
@@ -384,24 +457,14 @@ void setup() {
 
 
 /*+--------------------------------------------------------------------------------------+
- *| Uptime counter in hours                                                              |
- *+--------------------------------------------------------------------------------------+ */
- 
-void Uptime() {
-
-  UptimeHours++;
-
-}
-
-/*+--------------------------------------------------------------------------------------+
  *| main loop                                                                            |
  *+--------------------------------------------------------------------------------------+ */
  
 void loop() {
 
-  runner.execute();
+  runner.execute();    // Scheduler stuff
 
-  MQTTclient.loop();                                      // Needs to be in the loop to keep client connection alive
+  MQTTclient.loop();       // Needs to be in the loop to keep client connection alive
 
 
   
