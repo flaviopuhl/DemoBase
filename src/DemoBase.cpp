@@ -370,8 +370,11 @@ void SerializeAndPublish() {
     serializeJsonPretty(doc, Serial);                 // Print JSON payload on Serial port        
       Serial.printf("\n");
       Serial.println("MQTT Client   : [ Sending message to MQTT topic ]"); 
-      Serial.println("");                 
-      MQTTclient.publish(TOPIC, buffer);                    // Publish data to MQTT Broker 
+      Serial.println("");         
+
+    if(MQTTclient.publish(TOPIC, buffer)){    // Publish data to MQTT Broker 
+      Serial.println("MQTT Client   : [ failed to send ]"); 
+    };                    
 
 }
 
