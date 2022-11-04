@@ -38,17 +38,13 @@ const char *password                          = "09012011";                     
 #define WATCHDOGTIMEOUT                       10
 
 #define OTAFIRMWAREREPO                       "https://firebasestorage.googleapis.com/v0/b/firmwareota-a580e.appspot.com/o/ESP32OTAexample%2Ffirmware.bin?alt=media"
-RTC_DATA_ATTR int updateSoftareOnNextReboot;  // If =1, Controller will download and update on next reboot.  If =0 does nothing
 
-const char *ID = "DemoBase";                                 // Name of our device, must be unique
-const char *TOPIC = "DemoBase/data";                         // Topic to subcribe to
-const char* BROKER_MQTT = "broker.hivemq.com";               // MQTT Cloud Broker URL
-//const char* BROKER_MQTT = "mqtt.tago.io";               // MQTT Cloud Broker URL
-
-//TCP/IP port: 1883
-//TCP/IP port over SSL: 8883
-//username: Token
-//password: Your Device-Token
+const char *ID                                = "DemoBase";                               // Name of our device, must be unique
+const char* BROKER_MQTT                       = "broker.hivemq.com";                      // MQTT Cloud Broker URL
+const char *TOPIC                             = "DemoBase/data";                          // Topic to pucblish to
+const char *TOPIC_SUB_1                       = "DemoBase/reset";                         // Topic to subscribe to
+const char *TOPIC_SUB_2                       = "DemoBase/update";                        // Topic to subscribe to
+const char *TOPIC_SUB_3                       = "DemoBase/builtinled";                    // Topic to subscribe to
 
 String DeviceName                             = "DemoBase";
 String FirmWareVersion                        = "DemoBase_001";
@@ -59,8 +55,7 @@ String WakeUpReasonCPU1                       = "";
 int UptimeHours                               = 0;
 RTC_DATA_ATTR int UptimeHoursLifeTime;
 
-unsigned int previousMillis = 0;   //debug
-int i=0; // debug
+#define LED 2
 
 
 /*+--------------------------------------------------------------------------------------+
@@ -71,18 +66,20 @@ void VerifyWifi();
 void DateAndTimeNPT();
 void SerializeAndPublish();
 void Uptime();
+void IAmAlive();
 
 /*+--------------------------------------------------------------------------------------+
  *| Tasks lists                                                                          |
  *+--------------------------------------------------------------------------------------+ */
 
+Task t0(01*01*1000, TASK_FOREVER, &IAmAlive);
 Task t1(01*30*1000, TASK_FOREVER, &VerifyWifi);
 Task t2(60*60*1000, TASK_FOREVER, &DateAndTimeNPT);
 Task t3(01*60*1000, TASK_FOREVER, &SerializeAndPublish);
 Task t4(60*60*1000, TASK_FOREVER, &Uptime);
 
 /*+--------------------------------------------------------------------------------------+
- *| Objects                                                                          |
+ *| Objects                                                                              |
  *+--------------------------------------------------------------------------------------+ */
 
 Scheduler runner;                                           // Scheduler
@@ -90,6 +87,29 @@ ESP32Time rtc;
 
 WiFiClient wclient;
 PubSubClient MQTTclient(wclient);                           // Setup MQTT client
+
+
+/*+--------------------------------------------------------------------------------------+
+ *| Method to reset the device                                                           |
+ *+--------------------------------------------------------------------------------------+ */
+ 
+void deviceReset() {
+
+  ESP.restart();
+  
+}
+
+
+/*+--------------------------------------------------------------------------------------+
+ *| Method to drive the built-in led                                                     |
+ *+--------------------------------------------------------------------------------------+ */
+ 
+void builtInLedTest(int input) {
+
+  if (input == 0 ) { digitalWrite(LED,LOW);  Serial.println("Turn the LED off"); }     
+  if (input == 1 ) { digitalWrite(LED,HIGH); Serial.println("Turn the LED on");  }   
+  
+}
 
 
 /*+--------------------------------------------------------------------------------------+
@@ -107,7 +127,7 @@ void setup_wifi() {
     while (WiFi.status() != WL_CONNECTED) {           // Wait for connection
       delay(500);
       Serial.print(".");
-      if (++wait_passes >= 20) { ESP.restart(); }     // Restart in case of no wifi connection   
+      if (++wait_passes >= 20) { deviceReset(); }     // Restart in case of no wifi connection   
     }
 
   Serial.print("\nWiFi connected");
@@ -185,30 +205,6 @@ String DateAndTimeFormattedRTC(){
  *| Method to print the reason by which ESP32 has been awaken from sleep                 |
  *+--------------------------------------------------------------------------------------+ */
 
-
-//void print_reset_reason(RESET_REASON reason)
-//{
-//  switch ( reason)
-//  {
-//    case 1 : Serial.println ("POWERON_RESET");break;          /**<1, Vbat power on reset*/
-//    case 3 : Serial.println ("SW_RESET");break;               /**<3, Software reset digital core*/
-//    case 4 : Serial.println ("OWDT_RESET");break;             /**<4, Legacy watch dog reset digital core*/
-//    case 5 : Serial.println ("DEEPSLEEP_RESET");break;        /**<5, Deep Sleep reset digital core*/
-//    case 6 : Serial.println ("SDIO_RESET");break;             /**<6, Reset by SLC module, reset digital core*/
-//    case 7 : Serial.println ("TG0WDT_SYS_RESET");break;       /**<7, Timer Group0 Watch dog reset digital core*/
-//    case 8 : Serial.println ("TG1WDT_SYS_RESET");break;       /**<8, Timer Group1 Watch dog reset digital core*/
-//    case 9 : Serial.println ("RTCWDT_SYS_RESET");break;       /**<9, RTC Watch dog Reset digital core*/
-//    case 10 : Serial.println ("INTRUSION_RESET");break;       /**<10, Instrusion tested to reset CPU*/
-//    case 11 : Serial.println ("TGWDT_CPU_RESET");break;       /**<11, Time Group reset CPU*/
-//    case 12 : Serial.println ("SW_CPU_RESET");break;          /**<12, Software reset CPU*/
-//    case 13 : Serial.println ("RTCWDT_CPU_RESET");break;      /**<13, RTC Watch dog Reset CPU*/
-//    case 14 : Serial.println ("EXT_CPU_RESET");break;         /**<14, for APP CPU, reseted by PRO CPU*/
-//    case 15 : Serial.println ("RTCWDT_BROWN_OUT_RESET");break;/**<15, Reset when the vdd voltage is not stable*/
-//    case 16 : Serial.println ("RTCWDT_RTC_RESET");break;      /**<16, RTC Watch dog reset digital core and rtc module*/
-//    default : Serial.println ("NO_MEAN");
-//  }
-//}
-
 String print_reset_reason(RESET_REASON reason)
 {
   String rst_reason;
@@ -267,11 +263,13 @@ void verbose_print_reset_reason(int reason)
 
 void RemoteHTTPOTA(){
 
-  if ((WiFi.status() == WL_CONNECTED && updateSoftareOnNextReboot == 1)) {
+  //if ((WiFi.status() == WL_CONNECTED && updateSoftareOnNextReboot == 1)) {
+  if ((WiFi.status() == WL_CONNECTED)) {
 
     Serial.println("SW Update     :  [ Started ]");
 
-    updateSoftareOnNextReboot = 0;    // Clear the update flag
+    esp_task_wdt_init(WATCHDOGTIMEOUT, false); 
+
 
     WiFiClientSecure client; 
     client.setInsecure();       
@@ -317,7 +315,8 @@ void MQTTconnect() {
   Serial.println();
   Serial.println("MQTT Client   : [ not connected ]");
 
-  MQTTclient.setServer(BROKER_MQTT, 1883);                    // MQTT port, unsecure                        
+  MQTTclient.setServer(BROKER_MQTT, 1883);                    // MQTT port, unsecure
+                      
     
     Serial.println("MQTT Client   : [ trying connection ]");
     
@@ -326,6 +325,22 @@ void MQTTconnect() {
       Serial.print("MQTT Client   : [ publishing to ");
       Serial.print(TOPIC);
       Serial.println(" ]");
+
+      Serial.print("MQTT Client   : [ subscribing to ");
+      Serial.print(TOPIC_SUB_1);
+      Serial.println(" ]");
+      MQTTclient.subscribe(TOPIC_SUB_1);
+
+      Serial.print("MQTT Client   : [ subscribing to ");
+      Serial.print(TOPIC_SUB_2);
+      Serial.println(" ]");
+      MQTTclient.subscribe(TOPIC_SUB_2);
+
+      Serial.print("MQTT Client   : [ subscribing to ");
+      Serial.print(TOPIC_SUB_3);
+      Serial.println(" ]");
+      MQTTclient.subscribe(TOPIC_SUB_3);
+
     } else {
       Serial.print("MQTT Client   : [ failed, rc= ");
       Serial.print(MQTTclient.state());
@@ -378,16 +393,59 @@ void SerializeAndPublish() {
 
 }
 
+
+/*+--------------------------------------------------------------------------------------+
+ *| MQTT Callback                                                                        |
+ *+--------------------------------------------------------------------------------------+ */
+
+String MQTTcallback(char* topicSubscribed, byte* payload, unsigned int length) {
+  
+  String payloadReceived = "";
+  
+  Serial.print("Message arrived [");
+  Serial.print(topicSubscribed);
+  Serial.print("] ");
+
+  for (int i = 0; i < length; i++) {
+    //Serial.print((char)payload[i]);
+    payloadReceived += (char)payload[i];
+  }
+  Serial.println();
+
+  Serial.println(payloadReceived);
+
+  if (strcmp (topicSubscribed, TOPIC_SUB_1) == 0 ) { deviceReset();}
+  if (strcmp (topicSubscribed, TOPIC_SUB_2) == 0 ) { RemoteHTTPOTA();}
+  if (strcmp (topicSubscribed, TOPIC_SUB_3) == 0 ) { builtInLedTest(payloadReceived.toInt());}
+
+  return payloadReceived;
+
+}
+
+
 /*+--------------------------------------------------------------------------------------+
  *| Uptime counter in hours                                                              |
  *+--------------------------------------------------------------------------------------+ */
  
 void Uptime() {
 
-  UptimeHours++;          // Uptime counts the time the device is working since last power on
+  UptimeHours++;            // Uptime counts the time the device is working since last power on
   UptimeHoursLifeTime++;    // Life time counts the total time the device is been working
 
 }
+
+
+/*+--------------------------------------------------------------------------------------+
+ *| Simple method to show that program is running                                        |
+ *+--------------------------------------------------------------------------------------+ */
+
+void IAmAlive(){
+
+  Serial.print("RTC formatted  : ");
+  Serial.println(DateAndTimeFormattedRTC());
+  
+}
+
 
 /*+--------------------------------------------------------------------------------------+
  *| Setup                                                                                |
@@ -398,11 +456,19 @@ void setup() {
   Serial.begin(115200);                                                                     // Start serial communication at 115200 baud
   delay(1000);
 
+  pinMode(LED,OUTPUT);
+  digitalWrite(LED,LOW);
+
   Serial.println();
   Serial.println(FirmWareVersion);
   Serial.println();
 
   runner.init();
+
+    runner.addTask(t0);
+    t0.enable();  
+      Serial.println("Added task    : [ IAmAlive ]");
+
     runner.addTask(t1);
     t1.enable();  
       Serial.println("Added task    : [ VerifyWifi ]");
@@ -419,9 +485,7 @@ void setup() {
     t4.enable();
       Serial.println("Added task    : [ Uptime ]");
 
-  setup_wifi();     // Start wifi
-
-  RemoteHTTPOTA();      // Check for firmware updates
+  setup_wifi();         // Start wifi
 
   esp_task_wdt_init(WATCHDOGTIMEOUT, true);               // Enable watchdog                                               
   esp_task_wdt_add(NULL);                                 // No tasks attached to watchdog
@@ -431,13 +495,7 @@ void setup() {
 
   MQTTconnect();        // Connect to MQTT Broker
 
-  SerializeAndPublish();
-
-  Serial.print("RTC Unix       : ");          // debug only
-  Serial.println(DateAndTimeEpochRTC());      // debug only
-
-  Serial.print("RTC formatted  : ");          // debug only
-  Serial.println(DateAndTimeFormattedRTC());  // debug only
+  MQTTclient.setCallback(MQTTcallback);       // MQTT callback method to subscribing topics
  
   WakeUpReasonCPU0 = print_reset_reason(rtc_get_reset_reason(0));
     Serial.print("CPU0 rst reason: ");
@@ -448,12 +506,15 @@ void setup() {
     Serial.print("CPU1 rst reason: ");
     Serial.print(WakeUpReasonCPU1);
       verbose_print_reset_reason(rtc_get_reset_reason(1));
-
-    
    
   UptimeHours--;
 
-  Serial.print("\n\nSetup Finished - 1001 \n\n");
+  SerializeAndPublish();
+
+  Serial.println("");
+  Serial.println("Setup         : [ finished ]");
+  Serial.println("");
+  
   esp_task_wdt_reset();   // feed watchdog
 
 }
@@ -465,34 +526,10 @@ void setup() {
  
 void loop() {
 
-  runner.execute();    // Scheduler stuff
+  runner.execute();         // Scheduler stuff
 
-  MQTTclient.loop();       // Needs to be in the loop to keep client connection alive
+  MQTTclient.loop();        // Needs to be in the loop to keep client connection alive
 
-
-  
-  
-  
-  
-  unsigned int currentMillis = millis();        // debug only
-
-  if (millis() - previousMillis >= 1000) {                                                  
-     
-    //i++;
-
-    //if(i>=10){
-    //  Serial.println("Teste wtd");
-    //  delay(15000);
-    //}
-    
-    
-    Serial.print("RTC formatted  : ");
-    Serial.println(DateAndTimeFormattedRTC());
-
-    previousMillis = millis();
-  }
-
-  
   esp_task_wdt_reset();     // feed watchdog
 
 }
