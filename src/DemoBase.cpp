@@ -47,7 +47,7 @@ const char *TOPIC_SUB_2                       = "DemoBase/update";              
 const char *TOPIC_SUB_3                       = "DemoBase/builtinled";                    // Topic to subscribe to
 
 String DeviceName                             = "DemoBase";
-String FirmWareVersion                        = "DemoBase_001";
+String FirmWareVersion                        = "DemoBase_002";
 
 String WakeUpReasonCPU0                       = "";
 String WakeUpReasonCPU1                       = "";
