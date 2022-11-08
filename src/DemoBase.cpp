@@ -32,22 +32,34 @@
  *| Constants declaration                                                                |
  *+--------------------------------------------------------------------------------------+ */
  
+ // Insert here the wifi network credentials
 const char *ssid                              = "CasaDoTheodoro1";                        // name of your WiFi network
 const char *password                          = "09012011";                               // password of the WiFi network
 
-#define WATCHDOGTIMEOUT                       10
-
+// Insert here the *.bin file repository path
 #define OTAFIRMWAREREPO                       "https://firebasestorage.googleapis.com/v0/b/firmwareota-a580e.appspot.com/o/ESP32OTAexample%2Ffirmware.bin?alt=media"
 
+// Insert here MQTT device name and broker
 const char *ID                                = "DemoBase";                               // Name of our device, must be unique
 const char* BROKER_MQTT                       = "broker.hivemq.com";                      // MQTT Cloud Broker URL
-const char *TOPIC                             = "DemoBase/data";                          // Topic to pucblish to
-const char *TOPIC_SUB_1                       = "DemoBase/reset";                         // Topic to subscribe to
-const char *TOPIC_SUB_2                       = "DemoBase/update";                        // Topic to subscribe to
-const char *TOPIC_SUB_3                       = "DemoBase/builtinled";                    // Topic to subscribe to
+
+// Insert here topics that the device will publish to broker
+const char *TopicsToPublish[]                 = { 
+                                                "DemoBase/data",
+                                                "DemoBase/info"
+                                              };
+
+// Insert here the topics the device will listen from broker
+const char *TopicsToSubscribe[]               = { 
+                                                "DemoBase/reset", 
+                                                "DemoBase/update",  
+                                                "DemoBase/builtinled"
+                                              };
+
+
 
 String DeviceName                             = "DemoBase";
-String FirmWareVersion                        = "DemoBase_001";
+String FirmWareVersion                        = "DemoBase_002";
 
 String WakeUpReasonCPU0                       = "";
 String WakeUpReasonCPU1                       = "";
@@ -55,7 +67,9 @@ String WakeUpReasonCPU1                       = "";
 int UptimeHours                               = 0;
 RTC_DATA_ATTR int UptimeHoursLifeTime;
 
-#define LED 2
+#define LED 2       // Built In Led pin
+
+#define WATCHDOGTIMEOUT                       10    // Watchdog set to 10 sec
 
 
 /*+--------------------------------------------------------------------------------------+
@@ -95,6 +109,8 @@ PubSubClient MQTTclient(wclient);                           // Setup MQTT client
  
 void deviceReset() {
 
+  MQTTclient.publish(TopicsToPublish[1], "Restarting device");
+  delay(1000);
   ESP.restart();
   
 }
@@ -106,8 +122,16 @@ void deviceReset() {
  
 void builtInLedTest(int input) {
 
-  if (input == 0 ) { digitalWrite(LED,LOW);  Serial.println("Turn the LED off"); }     
-  if (input == 1 ) { digitalWrite(LED,HIGH); Serial.println("Turn the LED on");  }   
+  if (input == 0 ) { 
+    digitalWrite(LED,LOW);  
+    Serial.println("Turning LED off"); 
+    MQTTclient.publish(TopicsToPublish[1], "Turning LED off");
+    }     
+  if (input == 1 ) { 
+    digitalWrite(LED,HIGH); 
+    Serial.println("Turning LED on");  
+    MQTTclient.publish(TopicsToPublish[1], "Turning LED on");
+    }   
   
 }
 
@@ -263,6 +287,8 @@ void verbose_print_reset_reason(int reason)
 
 void RemoteHTTPOTA(){
 
+  MQTTclient.publish(TopicsToPublish[1], "Updating device");
+
   //if ((WiFi.status() == WL_CONNECTED && updateSoftareOnNextReboot == 1)) {
   if ((WiFi.status() == WL_CONNECTED)) {
 
@@ -316,30 +342,29 @@ void MQTTconnect() {
   Serial.println("MQTT Client   : [ not connected ]");
 
   MQTTclient.setServer(BROKER_MQTT, 1883);                    // MQTT port, unsecure
+  MQTTclient.setBufferSize(1024);
                       
     
     Serial.println("MQTT Client   : [ trying connection ]");
     
     if (MQTTclient.connect(ID)) {
       Serial.println("MQTT Client   : [ broker connected ]");
-      Serial.print("MQTT Client   : [ publishing to ");
-      Serial.print(TOPIC);
-      Serial.println(" ]");
 
-      Serial.print("MQTT Client   : [ subscribing to ");
-      Serial.print(TOPIC_SUB_1);
-      Serial.println(" ]");
-      MQTTclient.subscribe(TOPIC_SUB_1);
+      for(int i=0; i<=((sizeof(TopicsToPublish) / sizeof(TopicsToPublish[0]))-1); i++){
 
-      Serial.print("MQTT Client   : [ subscribing to ");
-      Serial.print(TOPIC_SUB_2);
-      Serial.println(" ]");
-      MQTTclient.subscribe(TOPIC_SUB_2);
+        Serial.print("MQTT Client   : [ publishing to ");
+        Serial.print(TopicsToPublish[i]);
+        Serial.println(" ]");
+        MQTTclient.subscribe(TopicsToPublish[i]);
+      }
 
-      Serial.print("MQTT Client   : [ subscribing to ");
-      Serial.print(TOPIC_SUB_3);
-      Serial.println(" ]");
-      MQTTclient.subscribe(TOPIC_SUB_3);
+      for(int i=0; i<=((sizeof(TopicsToSubscribe) / sizeof(TopicsToSubscribe[0]))-1); i++){
+
+        Serial.print("MQTT Client   : [ subscribing to ");
+        Serial.print(TopicsToSubscribe[i]);
+        Serial.println(" ]");
+        MQTTclient.subscribe(TopicsToSubscribe[i]);
+      }
 
     } else {
       Serial.print("MQTT Client   : [ failed, rc= ");
@@ -362,7 +387,7 @@ void SerializeAndPublish() {
   {    MQTTconnect();      }
 
   char buff[10];                                      // Buffer to allocate decimal to string conversion 
-  char buffer[256];                                   // JSON serialization 
+  char buffer[1024];                                   // JSON serialization 
   
     StaticJsonDocument<256> doc;                      // See ArduinoJson Assistant V6 
     
@@ -387,7 +412,7 @@ void SerializeAndPublish() {
       Serial.println("MQTT Client   : [ Sending message to MQTT topic ]"); 
       Serial.println("");         
 
-    if(MQTTclient.publish(TOPIC, buffer)){    // Publish data to MQTT Broker 
+    if(MQTTclient.publish(TopicsToPublish[0], buffer)){    // Publish data to MQTT Broker 
       Serial.println("MQTT Client   : [ failed to send ]"); 
     };                    
 
@@ -414,9 +439,9 @@ String MQTTcallback(char* topicSubscribed, byte* payload, unsigned int length) {
 
   Serial.println(payloadReceived);
 
-  if (strcmp (topicSubscribed, TOPIC_SUB_1) == 0 ) { deviceReset();}
-  if (strcmp (topicSubscribed, TOPIC_SUB_2) == 0 ) { RemoteHTTPOTA();}
-  if (strcmp (topicSubscribed, TOPIC_SUB_3) == 0 ) { builtInLedTest(payloadReceived.toInt());}
+  if (strcmp (topicSubscribed, TopicsToSubscribe[0]) == 0 ) { deviceReset();}
+  if (strcmp (topicSubscribed, TopicsToSubscribe[1]) == 0 ) { RemoteHTTPOTA();}
+  if (strcmp (topicSubscribed, TopicsToSubscribe[2]) == 0 ) { builtInLedTest(payloadReceived.toInt());}
 
   return payloadReceived;
 
@@ -509,7 +534,7 @@ void setup() {
    
   UptimeHours--;
 
-  SerializeAndPublish();
+  //SerializeAndPublish();
 
   Serial.println("");
   Serial.println("Setup         : [ finished ]");
