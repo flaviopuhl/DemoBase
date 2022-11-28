@@ -355,7 +355,7 @@ void MQTTconnect() {
         Serial.print("MQTT Client   : [ publishing to ");
         Serial.print(TopicsToPublish[i]);
         Serial.println(" ]");
-        MQTTclient.subscribe(TopicsToPublish[i]);
+        //MQTTclient.subscribe(TopicsToPublish[i]); 
       }
 
       for(int i=0; i<=((sizeof(TopicsToSubscribe) / sizeof(TopicsToSubscribe[0]))-1); i++){
